@@ -1,74 +1,44 @@
-# 🛠️ Prerequisites
-Before you begin, ensure you have the following installed:
+# NCU Regulation Assistant (GraphRAG)
 
-* Python 3.11 (Strict requirement) 
+## 1. Project Overview
+This project implements a **Knowledge Graph-based Retrieval-Augmented Generation (GraphRAG)** system for National Central University (NCU) academic regulations. Unlike traditional Vector RAG, which relies solely on semantic similarity, this system utilizes a structured **Neo4j** knowledge graph to maintain the logical integrity of legal rules, significantly reducing hallucinations.
 
-* Docker Desktop (Required to run the Neo4j database)
+## 2. Knowledge Graph Schema Design
+The system organizes information into a three-tier hierarchical structure to ensure precise navigation and logical reasoning:
 
-* Internet access for first-time HuggingFace model download (local model will be cached)
-# ⚙️ Environment Setup
-### 1. Database Setup (Neo4j via Docker)
+* **Nodes:**
+    * `Regulation`: The root node representing the specific law or set of rules (e.g., *NCU Student Examination Regulations*).
+    * `Article`: Represents a specific article within a regulation, containing the raw text and article number.
+    * `Rule`: The smallest logical unit extracted via LLM, structured into `Action` (the trigger condition) and `Result` (the legal consequence).
+* **Relationships:**
+    * `(:Regulation)-[:HAS_ARTICLE]->(:Article)`: Establishes hierarchy.
+    * `(:Article)-[:CONTAINS_RULE]->(:Rule)`: Maps raw text to structured logic.
 
-You must run a local Neo4j instance using Docker. Run the following command in your terminal:
-
-` docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/password neo4j:latest `
-
-Explanation of flags:
-
-* -d: Runs the container in detached mode (background).
-
-*  -p 7474:7474: Exposes the web interface port (Browser).
-
-*  -p 7687:7687: Exposes the Bolt protocol port (Python connection).
-
-*  -e NEO4J_AUTH=...: Sets the username (neo4j) and password (password).
-
-Verification: After running the command, check if the database is ready:
-
-1. Open your browser and go to http://localhost:7474.
-
-2. Login with user: neo4j and password: password.
-
-### 2. Virtual Environment Setup
-
-It is highly recommended to use a virtual environment to manage dependencies.
-
-**For macOS / Linux:**
-```
-# Create virtual environment
-python -m venv venv
-
-# Activate environment
-source venv/bin/activate
-```
-**For Windows:**
-```
-# Create virtual environment
-python -m venv venv
-
-# Activate environment
-venv\Scripts\activate
-```
-
-### 3. Install Dependencies
-
-`pip install -r requirements.txt`
-
-# 📂 File Descriptions
-
-* **source/:** Folder containing raw English PDF regulations
-* **setup_data.py:** Parses PDFs using pdfplumber and Regex, cleans the text, and stores structured data into a local SQLite database
-* **build_kg.py:** Reads from SQLite and executes Cypher queries to create nodes (Regulation, Article) and relationships (HAS_ARTICLE) in Neo4j.
-* **query_system.py:** The interactive chatbot. It retrieves full regulation context and uses the LLM to generate answers.
-* **auto_test.py:** Runs benchmark questions in test_data.json and uses an "LLM-as-a-Judge" to score your system (Pass/Fail).
-
-# 🚀 Execution Order
-**make sure you have already run neo4j in docker**
-**run commands in this repository root folder**
-1. `python setup_data.py`
-2. `python build_kg.py`
-3. (Not necessary)`python query_system.py`: Test your system manually to see if it answers correctly.
-4. `python auto_test.py`: run the benchmark test  
+**Graph Visualization:**
+The image below shows the "Star Schema" where a central Regulation connects to multiple Articles, which in turn branch out into specific Rule nodes.
+![KG Visualization](./images/visualisation.png)
 
 
 
+## 3. Key Implementation Highlights
+* **Two-Dimensional Retrieval Architecture:**
+    * **Horizontal Dimension:** Full-text indexing on `Article` content and `Rule` attributes for precise keyword matching.
+    * **Vertical Dimension:** Path-based jumping in Neo4j, allowing the agent to retrieve the full context of a rule by traversing back to its parent Article and Regulation.
+* **Robust Extraction & Fallback Mechanism:** * Designed a custom **JSON Parser with Regex** to handle inconsistent outputs from the local 1.5B model.
+    * Implemented a **Deterministic Fallback** system: If the LLM fails to extract rules, a "General Rule" node is created to ensure the Article remains searchable within the graph.
+* **Hybrid Query Processing:** The system cleans the user's raw query and combines it with extracted keywords to balance high **Recall** (finding the right article) and high **Precision** (pinpointing the specific rule).
+
+## 4. Evaluation Results
+* **Query Accuracy:** **90.0%** (Passed 18 out of 20 test cases).
+![test_result](./images/test_result.png)
+* **KG Coverage:** **128/159 articles (80.5%)**.
+    * *Note:* The "uncovered" articles are primarily introductory or supplementary provisions (e.g., effective dates) that lack actionable "Action-Result" logic. This ensures the Knowledge Graph remains high-quality and noise-free.
+
+## 5. Getting Started
+1.  **Environment Setup:** `pip install -r requirements.txt`
+2.  **Data Initialization:** Run `python setup_data.py` to prepare the SQLite database.
+3.  **Build Knowledge Graph:** Run `python build_kg.py` (ensure Neo4j is running).
+4.  **Run System:** Use `python query_system.py` for manual Q&A or `python auto_test.py` for evaluation.
+
+---
+*Developed as part of the NCU AI Master's Program - Assignment 4.*
